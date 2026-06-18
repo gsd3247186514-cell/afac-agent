@@ -290,6 +290,6 @@ def parse_args():
     return p.parse_args()
 
 if __name__ == '__main__':
-    args = parse_args()
+    args, _ = parse_args().parse_known_args()  # 忽略Agent传来的未知参数
     ret = train(args)
     sys.exit(ret)
