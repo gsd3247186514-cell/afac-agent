@@ -58,7 +58,7 @@ def load_and_build(data_dir, max_len=50):
 
     test_data = []
     for _, row in test_df.iterrows():
-        uid = int(row['uid'])
+        uid = int(str(row['uid']).lstrip('uU'))
         seq = parse_seq(row.get('item_seq_dedup', row.get('item_seq_raw', '')))
         test_data.append((uid, seq[-max_len + 1:] if len(seq) > max_len else seq))
     return train_data, test_data, NI, iid2idx, idx2iid
@@ -193,7 +193,7 @@ def main():
     train_csv = os.path.join(data_dir, 'train.csv')
     sim_mat = build_itemcf(train_csv, iid2idx, NI)
     df = pd.read_csv(train_csv)
-    popular = df['target_iid'].value_counts().index.tolist()[:50]
+    popular = [int(str(p).lstrip('iI')) for p in df['target_iid'].value_counts().index.tolist()[:50]]
     pop_idxs = [iid2idx.get(p, 1) for p in popular if p in iid2idx]
 
     results = []
