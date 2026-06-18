@@ -170,8 +170,8 @@ def main():
     os.makedirs(out_dir, exist_ok=True)
 
     # ULTRA hyperparams
-    MAX_LEN, EMBED_DIM, NUM_HEADS, NUM_LAYERS = 100, 256, 8, 4
-    DROPOUT, LR, WD, EPOCHS, BS = 0.1, 0.0005, 1e-4, 40, 1024
+    MAX_LEN, EMBED_DIM, NUM_HEADS, NUM_LAYERS = 50, 128, 4, 2
+    DROPOUT, LR, WD, EPOCHS, BS = 0.2, 0.001, 1e-4, 20, 512
     N_SEEDS = 3
     SEEDS = [42, 777, 2024]
 
