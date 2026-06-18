@@ -1,0 +1,55 @@
+# 自主科研Agent系统 - 配置文件示例
+
+# LLM配置
+llm:
+  model: "gpt-5.5"
+  api_key: "sk-7b5f1de3b330ec1a04ae300cb5d2c3b335cc2a2b8088b21a3694a63869cc2881"              # 从环境变量 LLM_API_KEY 读取
+  base_url: "https://api.dufuhetudoull.com/v1"             # 从环境变量 LLM_BASE_URL 读取
+  temperature: 0.7
+  max_tokens: 4096
+  timeout: 120
+
+# 科研流程配置
+research:
+  budget: 3                # 快速验证用3轮
+  time_limit: 1800         # 30分钟
+  early_stop_patience: 3
+  enable_literature: true
+  enable_diagnosis: true
+  enable_design: true
+  enable_experiment: true
+  max_iterations: 20
+  output_dir: "./output"
+
+# 任务配置
+tasks:
+  task1:                   # 产品分类任务
+    task_id: 1
+    task_type: "classification"
+    data_path: "data/cls_data/A1.npz"  # A1.npz 路径
+    sample_path: "data/cls_data/sample_submission.csv"  # sample_submission.csv 路径
+    model_type: "sage"     # gcn / sage / gat
+    hidden_dim: 128
+    num_layers: 2
+    lr: 0.01
+    epochs: 100 
+    early_stop: 20
+    dropout: 0.5
+
+  task2:                   # 产品推荐任务
+    task_id: 2
+    task_type: "recommendation"
+    data_path: "data/rec_data"  # 数据目录路径
+    sample_path: "data/rec_data/sample_submission.csv"  # 提交模板路径
+    model_type: "gru4rec"  # gru4rec / sasrec
+    embedding_dim: 64
+    hidden_dim: 128
+    lr: 0.001
+    epochs: 30
+    early_stop: 5
+    batch_size: 256
+    dropout: 0.2
+
+# 系统配置
+device: "cuda"
+seed: 42
