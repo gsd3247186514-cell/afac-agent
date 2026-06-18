@@ -52,7 +52,8 @@ def load_and_build(data_dir, max_len=50):
     for _, row in train_df.iterrows():
         seq = parse_seq(row.get('item_seq_dedup', row.get('item_seq_raw', '')))
         if len(seq) < 2: continue
-        for i in range(1, len(seq)):
+        # 只取最后3个位置 (砍90%样本, 保留时序信息)
+        for i in range(max(1, len(seq)-3), len(seq)):
             prefix = seq[max(0, i - max_len + 1):i]
             train_data.append((prefix, seq[i]))
 
@@ -168,10 +169,10 @@ def main():
     os.makedirs(out_dir, exist_ok=True)
 
     # ULTRA hyperparams
-    MAX_LEN, EMBED_DIM, NUM_HEADS, NUM_LAYERS = 50, 256, 8, 4
-    DROPOUT, LR, WD, EPOCHS, BS = 0.1, 0.001, 1e-4, 100, 1024
-    N_SEEDS = 5
-    SEEDS = [42, 123, 777, 2024, 9999]
+    MAX_LEN, EMBED_DIM, NUM_HEADS, NUM_LAYERS = 50, 128, 4, 3
+    DROPOUT, LR, WD, EPOCHS, BS = 0.1, 0.001, 1e-4, 40, 2048
+    N_SEEDS = 3
+    SEEDS = [42, 777, 2024]
 
     print(f"[A2_ULTRA] Loading data...", flush=True)
     train_data, test_data, NI, iid2idx, idx2iid = load_and_build(data_dir, MAX_LEN)
