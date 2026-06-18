@@ -92,6 +92,32 @@ def train_config(cfg):
                 for i in range(nlayers-1):
                     h = F.relu(F.dropout(A_sp @ layers[i](h) if i==0 else layers[i](h), p=DROP, training=False))
                 probs.append(F.softmax(layers[-1](h), dim=-1).cpu().numpy()[te_idx])
+        elif arch == 'SAGE':
+            # GraphSAGE: concat(self, mean-aggregated neighbors) → wider linear
+            layers = []
+            for i in range(nlayers):
+                in_d = (F_IN*2) if i==0 else (hdim*2)
+                out_d = hdim if i<nlayers-1 else NC
+                layers.append(nn.Linear(in_d, out_d, device=DEV))
+            params = [p for l in layers for p in l.parameters()]
+            opt = torch.optim.AdamW(params, lr=LR, weight_decay=WD)
+            for _ in range(EPOCHS):
+                for l in layers: l.train()
+                opt.zero_grad()
+                h = X
+                for i in range(nlayers-1):
+                    h_neigh = A_sp @ h
+                    h_cat = torch.cat([h, h_neigh], dim=-1)
+                    h = F.relu(F.dropout(layers[i](h_cat), p=DROP, training=True))
+                F.cross_entropy(layers[-1](torch.cat([h, A_sp@h], dim=-1))[tr_t], Y_t[tr_t]).backward(); opt.step()
+            for l in layers: l.eval()
+            with torch.no_grad():
+                h = X
+                for i in range(nlayers-1):
+                    h_neigh = A_sp @ h
+                    h_cat = torch.cat([h, h_neigh], dim=-1)
+                    h = F.relu(F.dropout(layers[i](h_cat), p=DROP, training=False))
+                probs.append(F.softmax(layers[-1](torch.cat([h, A_sp@h], dim=-1)), dim=-1).cpu().numpy()[te_idx])
         else:  # GAT
             proj_layers = [nn.Linear(F_IN if i==0 else hdim*heads, hdim*heads, device=DEV) for i in range(nlayers)]
             out_layer = nn.Linear(hdim*heads, NC, device=DEV)
@@ -122,20 +148,25 @@ def train_config(cfg):
 
 # ═══ 配置表: 200+选民 ═══
 configs = [
-    # GCN系列 (100 voters)
-    ('GCN', 128, 2, 0, 0.75, 15),
-    ('GCN', 128, 2, 0, 0.85, 15),
-    ('GCN', 256, 3, 0, 0.85, 15),
-    ('GCN', 256, 3, 0, 0.93, 15),
-    ('GCN', 256, 4, 0, 0.93, 15),
+    # GCN系列 (85 voters)
+    ('GCN', 128, 2, 0, 0.75, 12),
+    ('GCN', 128, 2, 0, 0.85, 12),
+    ('GCN', 256, 3, 0, 0.85, 12),
+    ('GCN', 256, 3, 0, 0.93, 12),
+    ('GCN', 256, 4, 0, 0.93, 12),
     ('GCN', 512, 3, 0, 0.95, 13),
     ('GCN', 512, 4, 0, 0.97, 12),
-    # GAT系列 (120 voters)
-    ('GAT', 128, 2, 8, 0.80, 15),
-    ('GAT', 128, 2, 8, 0.90, 15),
-    ('GAT', 256, 3, 8, 0.90, 15),
-    ('GAT', 256, 3, 8, 0.95, 15),
-    ('GAT', 256, 4, 16, 0.95, 15),
+    # SAGE系列 (50 voters) — 专家推荐: SAGE > GAT > GCN
+    ('SAGE', 128, 2, 0, 0.80, 12),
+    ('SAGE', 128, 2, 0, 0.90, 12),
+    ('SAGE', 256, 3, 0, 0.90, 13),
+    ('SAGE', 256, 3, 0, 0.97, 13),
+    # GAT系列 (105 voters)
+    ('GAT', 128, 2, 8, 0.80, 12),
+    ('GAT', 128, 2, 8, 0.90, 12),
+    ('GAT', 256, 3, 8, 0.90, 12),
+    ('GAT', 256, 3, 8, 0.95, 12),
+    ('GAT', 256, 4, 16, 0.95, 12),
     ('GAT', 512, 3, 16, 0.93, 15),
     ('GAT', 512, 4, 16, 0.97, 15),
     ('GAT', 512, 4, 16, 0.99, 15),
@@ -172,12 +203,16 @@ print(f'TOTAL: {len(all_p)} voters, {elapsed:.0f}s ({elapsed/60:.1f}min)')
 print(f'Distribution: {dict(sorted(dist.items()))}')
 print(f'{"="*60}', flush=True)
 
-# 分歧分析
+# 分歧分析 (GCN vs SAGE vs GAT)
 n_gcn = sum(c[-1] for c in configs if c[0]=='GCN')
-gcn_mask = np.zeros(len(all_p), dtype=bool); gcn_mask[:n_gcn] = True
-gcn_v = all_p[gcn_mask].mean(0).argmax(1)
-gat_v = all_p[~gcn_mask].mean(0).argmax(1)
-print(f'GCN v GAT disagree: {(gcn_v!=gat_v).sum()}/2751 ({100*(gcn_v!=gat_v).sum()/2751:.1f}%)', flush=True)
+n_sage = sum(c[-1] for c in configs if c[0]=='SAGE')
+gcn_v = all_p[:n_gcn].mean(0).argmax(1)
+sage_v = all_p[n_gcn:n_gcn+n_sage].mean(0).argmax(1)
+gat_v = all_p[n_gcn+n_sage:].mean(0).argmax(1)
+print(f'Architecture disagreement:', flush=True)
+print(f'  GCN vs SAGE: {(gcn_v!=sage_v).sum()}/2751 ({100*(gcn_v!=sage_v).sum()/2751:.1f}%)', flush=True)
+print(f'  GCN vs GAT:  {(gcn_v!=gat_v).sum()}/2751 ({100*(gcn_v!=gat_v).sum()/2751:.1f}%)', flush=True)
+print(f'  SAGE vs GAT: {(sage_v!=gat_v).sum()}/2751 ({100*(sage_v!=gat_v).sum()/2751:.1f}%)', flush=True)
 
 # 保存
 import pandas as pd
@@ -186,9 +221,11 @@ os.makedirs(out_dir, exist_ok=True)
 out = pd.DataFrame({'test_idx': te_idx, 'label': final})
 out.to_csv(os.path.join(out_dir, 'A1.csv'), index=False)
 info = {
-    'voters': int(len(all_p)), 'gcn': int(n_gcn), 'gat': int(len(all_p)-n_gcn),
+    'voters': int(len(all_p)), 'gcn': int(n_gcn), 'sage': int(n_sage), 'gat': int(len(all_p)-n_gcn-n_sage),
     'epochs': EPOCHS, 'lp_iters': 80, 'lp_alphas': ALPHAS,
-    'disagree_pct': f'{(gcn_v!=gat_v).sum()/2751*100:.1f}%',
+    'disagree_GCNvSAGE': f'{(gcn_v!=sage_v).sum()/2751*100:.1f}%',
+    'disagree_GCNvGAT': f'{(gcn_v!=gat_v).sum()/2751*100:.1f}%',
+    'disagree_SAGEvGAT': f'{(sage_v!=gat_v).sum()/2751*100:.1f}%',
     'distribution': {str(k): v for k,v in sorted(dist.items())},
     'time_minutes': f'{elapsed/60:.1f}',
 }
