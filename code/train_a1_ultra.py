@@ -232,3 +232,11 @@ info = {
 with open(os.path.join(out_dir, 'a1_ultra_info.json'), 'w') as f:
     json.dump(info, f, indent=2)
 print(f'Saved to {out_dir}', flush=True)
+# ═══ 纯净摘要 — 这行直接复制给我 ═══
+print(f'[RESULT] {len(all_p)} voters | '
+      f'GCN:{n_gcn} SAGE:{n_sage} GAT:{int(len(all_p)-n_gcn-n_sage)} | '
+      f'dist: {dict(sorted(dist.items()))} | '
+      f'disagree: GvS={100*(gcn_v!=sage_v).sum()/2751:.1f}% '
+      f'GvGAT={100*(gcn_v!=gat_v).sum()/2751:.1f}% '
+      f'SvGAT={100*(sage_v!=gat_v).sum()/2751:.1f}% | '
+      f'{elapsed/60:.1f}min', flush=True)
