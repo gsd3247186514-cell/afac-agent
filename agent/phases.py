@@ -1177,6 +1177,9 @@ class DesignPhase(BasePhase):
             'max_len': [r'max_len[=: ]+(\d+)'],
         }
 
+        # 合法取值白名单
+        VALID_MODEL_TYPES = {'sage', 'gcn', 'gat', 'gru4rec', 'sasrec'}
+
         for param, pattern_list in patterns.items():
             for pattern in pattern_list:
                 matches = re.findall(pattern, code_changes, re.IGNORECASE)
@@ -1186,6 +1189,17 @@ class DesignPhase(BasePhase):
                         val = int(val)
                     elif param in ['dropout', 'lr']:
                         val = float(val)
+                    # 值域校验: 拒绝明显不合理的提取值
+                    if param == 'model_type' and str(val).lower() not in VALID_MODEL_TYPES:
+                        continue  # 跳过误提取的 'args','str','type' 等
+                    if param == 'num_layers' and (val < 1 or val > 6):
+                        continue
+                    if param == 'hidden_dim' and (val < 32 or val > 2048):
+                        continue
+                    if param == 'dropout' and (val < 0.0 or val > 0.95):
+                        continue
+                    if param == 'lr' and (val < 1e-6 or val > 0.5):
+                        continue
                     updates[param] = val
                     break  # 一个参数只取第一个匹配
 

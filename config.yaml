@@ -8,7 +8,7 @@ llm:
 research:
   budget: 15
   time_limit: 7200
-  early_stop_patience: 5
+  early_stop_patience: 8
   enable_literature: true
   enable_diagnosis: true
   enable_design: true
