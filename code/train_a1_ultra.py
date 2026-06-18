@@ -161,15 +161,15 @@ configs = [
     ('SAGE', 128, 2, 0, 0.90, 12),
     ('SAGE', 256, 3, 0, 0.90, 13),
     ('SAGE', 256, 3, 0, 0.97, 13),
-    # GAT系列 (105 voters)
-    ('GAT', 128, 2, 8, 0.80, 12),
-    ('GAT', 128, 2, 8, 0.90, 12),
-    ('GAT', 256, 3, 8, 0.90, 12),
-    ('GAT', 256, 3, 8, 0.95, 12),
-    ('GAT', 256, 4, 16, 0.95, 12),
-    ('GAT', 512, 3, 16, 0.93, 15),
-    ('GAT', 512, 4, 16, 0.97, 15),
-    ('GAT', 512, 4, 16, 0.99, 15),
+    # GAT系列 (105 voters) — DISABLED: too slow, marginal gain
+    # ('GAT', 128, 2, 8, 0.80, 12),
+    # ('GAT', 128, 2, 8, 0.90, 12),
+    # ('GAT', 256, 3, 8, 0.90, 12),
+    # ('GAT', 256, 3, 8, 0.95, 12),
+    # ('GAT', 256, 4, 16, 0.95, 12),
+    # ('GAT', 512, 3, 16, 0.93, 15),
+    # ('GAT', 512, 4, 16, 0.97, 15),
+    # ('GAT', 512, 4, 16, 0.99, 15),
 ]
 
 total_voters = sum(c[-1] for c in configs)
@@ -186,7 +186,7 @@ start_i = 0
 t0 = time.time()
 if os.path.exists(CKPT):
     ckpt = np.load(CKPT, allow_pickle=True)
-    all_probs = [ckpt[f'p{i}'] for i in range(len(ckpt.files))]
+    all_probs = [ckpt[f'p{i}'] for i in range(len(ckpt.files) - 1)]  # -1 to exclude 'elapsed' key
     start_i = len(all_probs)
     t0 -= float(ckpt.get('elapsed', 0))
     del ckpt
@@ -227,20 +227,22 @@ print(f'{"="*60}', flush=True)
 # 分歧分析 (GCN vs SAGE vs GAT)
 n_gcn = sum(c[-1] for c in configs if c[0]=='GCN')
 n_sage = sum(c[-1] for c in configs if c[0]=='SAGE')
+n_gat = sum(c[-1] for c in configs if c[0]=='GAT')
 gcn_v = all_p[:n_gcn].mean(0).argmax(1)
 sage_v = all_p[n_gcn:n_gcn+n_sage].mean(0).argmax(1)
-gat_v = all_p[n_gcn+n_sage:].mean(0).argmax(1)
 print(f'Architecture disagreement:', flush=True)
 print(f'  GCN vs SAGE: {(gcn_v!=sage_v).sum()}/2751 ({100*(gcn_v!=sage_v).sum()/2751:.1f}%)', flush=True)
-print(f'  GCN vs GAT:  {(gcn_v!=gat_v).sum()}/2751 ({100*(gcn_v!=gat_v).sum()/2751:.1f}%)', flush=True)
-print(f'  SAGE vs GAT: {(sage_v!=gat_v).sum()}/2751 ({100*(sage_v!=gat_v).sum()/2751:.1f}%)', flush=True)
+if n_gat > 0:
+    gat_v = all_p[n_gcn+n_sage:].mean(0).argmax(1)
+    print(f'  GCN vs GAT:  {(gcn_v!=gat_v).sum()}/2751 ({100*(gcn_v!=gat_v).sum()/2751:.1f}%)', flush=True)
+    print(f'  SAGE vs GAT: {(sage_v!=gat_v).sum()}/2751 ({100*(sage_v!=gat_v).sum()/2751:.1f}%)', flush=True)
 
 # 保存
 import pandas as pd
 out = pd.DataFrame({'test_idx': te_idx, 'label': final})
 out.to_csv(os.path.join(out_dir, 'A1.csv'), index=False)
 info = {
-    'voters': int(len(all_p)), 'gcn': int(n_gcn), 'sage': int(n_sage), 'gat': int(len(all_p)-n_gcn-n_sage),
+    'voters': int(len(all_p)), 'gcn': int(n_gcn), 'sage': int(n_sage), 'gat': int(n_gat),
     'epochs': EPOCHS, 'lp_iters': 80, 'lp_alphas': ALPHAS,
     'disagree_GCNvSAGE': f'{(gcn_v!=sage_v).sum()/2751*100:.1f}%',
     'disagree_GCNvGAT': f'{(gcn_v!=gat_v).sum()/2751*100:.1f}%',
@@ -253,7 +255,7 @@ with open(os.path.join(out_dir, 'a1_ultra_info.json'), 'w') as f:
 print(f'Saved to {out_dir}', flush=True)
 # ═══ 纯净摘要 — 这行直接复制给我 ═══
 print(f'[RESULT] {len(all_p)} voters | '
-      f'GCN:{n_gcn} SAGE:{n_sage} GAT:{int(len(all_p)-n_gcn-n_sage)} | '
+      f'GCN:{n_gcn} SAGE:{n_sage} GAT:{int(n_gat)} | '
       f'dist: {dict(sorted(dist.items()))} | '
       f'disagree: GvS={100*(gcn_v!=sage_v).sum()/2751:.1f}% '
       f'GvGAT={100*(gcn_v!=gat_v).sum()/2751:.1f}% '
