@@ -245,11 +245,12 @@ info = {
     'voters': int(len(all_p)), 'gcn': int(n_gcn), 'sage': int(n_sage), 'gat': int(n_gat),
     'epochs': EPOCHS, 'lp_iters': 80, 'lp_alphas': ALPHAS,
     'disagree_GCNvSAGE': f'{(gcn_v!=sage_v).sum()/2751*100:.1f}%',
-    'disagree_GCNvGAT': f'{(gcn_v!=gat_v).sum()/2751*100:.1f}%',
-    'disagree_SAGEvGAT': f'{(sage_v!=gat_v).sum()/2751*100:.1f}%',
     'distribution': {str(k): v for k,v in sorted(dist.items())},
     'time_minutes': f'{elapsed/60:.1f}',
 }
+if n_gat > 0:
+    info['disagree_GCNvGAT'] = f'{(gcn_v!=gat_v).sum()/2751*100:.1f}%'
+    info['disagree_SAGEvGAT'] = f'{(sage_v!=gat_v).sum()/2751*100:.1f}%'
 with open(os.path.join(out_dir, 'a1_ultra_info.json'), 'w') as f:
     json.dump(info, f, indent=2)
 print(f'Saved to {out_dir}', flush=True)
@@ -257,7 +258,7 @@ print(f'Saved to {out_dir}', flush=True)
 print(f'[RESULT] {len(all_p)} voters | '
       f'GCN:{n_gcn} SAGE:{n_sage} GAT:{int(n_gat)} | '
       f'dist: {dict(sorted(dist.items()))} | '
-      f'disagree: GvS={100*(gcn_v!=sage_v).sum()/2751:.1f}% '
-      f'GvGAT={100*(gcn_v!=gat_v).sum()/2751:.1f}% '
-      f'SvGAT={100*(sage_v!=gat_v).sum()/2751:.1f}% | '
-      f'{elapsed/60:.1f}min', flush=True)
+      f'disagree: GvS={100*(gcn_v!=sage_v).sum()/2751:.1f}%'
+      + (f' GvGAT={100*(gcn_v!=gat_v).sum()/2751:.1f}%' if n_gat > 0 else '')
+      + (f' SvGAT={100*(sage_v!=gat_v).sum()/2751:.1f}%' if n_gat > 0 else '')
+      + f' | {elapsed/60:.1f}min', flush=True)
