@@ -287,9 +287,10 @@ def parse_args():
     p.add_argument('--batch_size', type=int, default=512)
     p.add_argument('--seed', type=int, default=42)
     p.add_argument('--device', type=str, default='cuda')
-    return p.parse_args()
+    return p  # 返回parser供调用方使用parse_known_args
 
 if __name__ == '__main__':
-    args, _ = parse_args().parse_known_args()  # 忽略Agent传来的未知参数
+    parser = parse_args()
+    args, _ = parser.parse_known_args()
     ret = train(args)
     sys.exit(ret)
