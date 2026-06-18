@@ -169,9 +169,9 @@ def main():
 
     # ULTRA hyperparams
     MAX_LEN, EMBED_DIM, NUM_HEADS, NUM_LAYERS = 50, 256, 8, 4
-    DROPOUT, LR, WD, EPOCHS, BS = 0.1, 0.001, 1e-4, 80, 1024
-    N_SEEDS = 3
-    SEEDS = [42, 777, 2024]
+    DROPOUT, LR, WD, EPOCHS, BS = 0.1, 0.001, 1e-4, 100, 1024
+    N_SEEDS = 5
+    SEEDS = [42, 123, 777, 2024, 9999]
 
     print(f"[A2_ULTRA] Loading data...", flush=True)
     train_data, test_data, NI, iid2idx, idx2iid = load_and_build(data_dir, MAX_LEN)
