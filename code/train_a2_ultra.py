@@ -153,6 +153,9 @@ def train_seed(seed, train_data, NI, max_len, embed_dim, num_heads, num_layers, 
             best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
             val_mrr = v_mrr
 
+        if ep % max(1, epochs // 10) == 0 or ep == 1:
+            print(f"  Ep{ep:3d}: loss={tl:.4f} val_loss={vl:.4f} mrr={v_mrr:.4f} lr={opt.param_groups[0]['lr']:.6f}", flush=True)
+
     model.load_state_dict(best_state)
     return model, val_mrr
 
