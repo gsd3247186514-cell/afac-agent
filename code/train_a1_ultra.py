@@ -176,17 +176,38 @@ total_voters = sum(c[-1] for c in configs)
 print(f'\n{len(configs)} configs, {total_voters} voters total', flush=True)
 print(f'Running on V100 with GPU-async parallelism...\n', flush=True)
 
-torch.cuda.synchronize()
-t0 = time.time()
+out_dir = sys.argv[2] if len(sys.argv) > 2 else '/tmp/a1_ultra'
+os.makedirs(out_dir, exist_ok=True)
+CKPT = os.path.join(out_dir, '.ckpt.npz')
 
-# ═══ 顺序训练 (每个config内部已是GPU满负荷) ═══
+# ═══ 断点续跑 ═══
 all_probs = []
-for i, cfg in enumerate(configs):
+start_i = 0
+t0 = time.time()
+if os.path.exists(CKPT):
+    ckpt = np.load(CKPT, allow_pickle=True)
+    all_probs = [ckpt[f'p{i}'] for i in range(len(ckpt.files))]
+    start_i = len(all_probs)
+    t0 -= float(ckpt.get('elapsed', 0))
+    del ckpt
+    done_sofar = sum(c[-1] for c in configs[:start_i])
+    print(f'[RESUME] {start_i}/{len(configs)} configs ({done_sofar} voters) loaded from .ckpt.npz', flush=True)
+
+torch.cuda.synchronize()
+if start_i == 0:
+    t0 = time.time()
+
+# ═══ 顺序训练 (每config完立刻存盘) ═══
+for i in range(start_i, len(configs)):
+    cfg = configs[i]
     probs = train_config(cfg)
     all_probs.append(probs)
     elapsed = time.time() - t0
     done = sum(c[-1] for c in configs[:i+1])
     print(f'  Progress: {done}/{total_voters} ({100*done/total_voters:.0f}%), {elapsed:.0f}s elapsed', flush=True)
+    # 断点保存 — 崩溃不丢
+    np.savez_compressed(CKPT, **{f'p{j}': p for j, p in enumerate(all_probs)}, elapsed=elapsed)
+    print(f'  [CKPT] saved {len(all_probs)} configs to {CKPT}', flush=True)
 
 torch.cuda.synchronize()
 elapsed = time.time() - t0
@@ -216,8 +237,6 @@ print(f'  SAGE vs GAT: {(sage_v!=gat_v).sum()}/2751 ({100*(sage_v!=gat_v).sum()/
 
 # 保存
 import pandas as pd
-out_dir = sys.argv[2] if len(sys.argv) > 2 else '/tmp/a1_ultra'
-os.makedirs(out_dir, exist_ok=True)
 out = pd.DataFrame({'test_idx': te_idx, 'label': final})
 out.to_csv(os.path.join(out_dir, 'A1.csv'), index=False)
 info = {
