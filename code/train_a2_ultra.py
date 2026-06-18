@@ -38,15 +38,15 @@ def load_and_build(data_dir, max_len=50):
     train_df = pd.read_csv(os.path.join(data_dir, 'train.csv'))
     test_df = pd.read_csv(os.path.join(data_dir, 'test.csv'))
     item_df = pd.read_csv(os.path.join(data_dir, 'item.csv'))
-    all_iids = sorted(item_df['iid'].tolist())
+    all_iids = sorted([int(str(i).lstrip('iI')) for i in item_df['iid'].tolist()])
     iid2idx = {iid: i + 1 for i, iid in enumerate(all_iids)}
     idx2iid = {i + 1: iid for i, iid in enumerate(all_iids)}
     NI = len(all_iids)
 
     def parse_seq(seq_str):
         if pd.isna(seq_str) or not seq_str: return []
-        items = [int(x) for x in str(seq_str).split(',') if x.strip()]
-        return [iid2idx[i] for i in items if i in iid2idx]
+        items = [x.strip().lstrip('iI') for x in str(seq_str).split(',') if x.strip()]
+        return [iid2idx[int(i)] for i in items if int(i) in iid2idx]
 
     train_data = []
     for _, row in train_df.iterrows():
