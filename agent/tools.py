@@ -209,7 +209,7 @@ class ToolRegistry:
                 config = {**config, 'model_type': 'sage'}
             elif task_type == 'task2':
                 config = {**config, 'model_type': 'gru4rec'}
-        cmd = [sys.executable, os.path.join(code_dir, "train.py"), "--task", str(task_type),
+        cmd = [sys.executable, os.path.join(code_dir, "train_a2.py" if task_type in ('task2','recommendation') else "train.py"), "--task", str(task_type),
                "--data_path", data_path, "--output_dir", output_dir, "--device", "cuda"]
         for k, v in config.items():
             cmd.extend([f"--{k}", str(v)])

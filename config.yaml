@@ -6,9 +6,9 @@ llm:
   max_tokens: 4096
   timeout: 120
 research:
-  budget: 15
+  budget: 12
   time_limit: 7200
-  early_stop_patience: 8
+  early_stop_patience: 10
   enable_literature: true
   enable_diagnosis: true
   enable_design: true
@@ -16,19 +16,6 @@ research:
   max_iterations: 30
   output_dir: "./output"
 tasks:
-  task1:
-    task_id: 1
-    task_type: "classification"
-    data_path: "data/cls_data/A1.npz"
-    model_type: "sage"
-    hidden_dim: 256
-    num_layers: 2
-    lr: 0.005
-    epochs: 200
-    early_stop: 30
-    dropout: 0.5
-    weight_decay: 0.0005
-    batch_size: 256
   task2:
     task_id: 2
     task_type: "recommendation"
