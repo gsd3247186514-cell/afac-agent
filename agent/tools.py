@@ -254,7 +254,7 @@ class ToolRegistry:
     def _run_inference(self, code_dir: str, task_id: int, checkpoint_path: str,
                       output_path: str) -> Dict[str, Any]:
         """执行推理脚本"""
-        cmd = ["python", os.path.join(code_dir, "infer.py"), "--task", str(task_id),
+        cmd = [sys.executable, os.path.join(code_dir, "infer.py"), "--task", str(task_id),
                "--checkpoint", checkpoint_path, "--output_path", output_path]
         return self._shell_exec(cmd, timeout=300)
 

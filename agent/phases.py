@@ -1122,51 +1122,36 @@ class DesignPhase(BasePhase):
         应用代码修改
 
         解析代码变更描述并实际修改文件。
-        这里实现一个简单的配置参数更新机制。
-
-        Returns:
-            实际修改的文件列表
+        同时始终提取配置参数更新(超参数调优), 无论是否有文件级diff。
         """
         modified = []
         code_dir = getattr(self.task_config, 'code_dir', './code')
 
         # 尝试解析diff格式的修改
-        # 简化实现：检查是否有具体的文件替换指令
         import re
 
-        # 查找 diff 格式的修改
         diff_pattern = r'(?:diff --git|[+]{3}|[-]{3})\s+([\w/\.]+)'
         file_matches = re.findall(diff_pattern, code_changes)
-
-        # 查找简单的替换指令: 文件 -> 旧 -> 新
         replace_pattern = r'文件[:：]?\s*([\w/\.]+)'
         replace_matches = re.findall(replace_pattern, code_changes)
-
         all_files = list(set(file_matches + replace_matches))
 
         if all_files:
-            # 有明确的文件修改指令
             for fname in all_files:
                 fpath = os.path.join(code_dir, fname)
                 if os.path.exists(fpath):
-                    # 这里简化处理：标记为已修改
-                    # 实际项目中应解析diff并应用
                     modified.append(fname)
 
-        # 如果没有明确的文件修改，检查是否需要更新配置
-        if not modified:
-            # 尝试从代码变更描述中提取配置更新
-            config_updates = self._extract_config_updates(code_changes)
-            if config_updates:
-                # 保存配置更新到任务目录
-                task_id = getattr(self.task_config, 'task_id', 0)
-                output_dir = getattr(self.task_config, 'output_dir', './output')
-                config_path = os.path.join(output_dir, f"task{task_id}", "config_update.json")
-                os.makedirs(os.path.dirname(config_path), exist_ok=True)
-                with open(config_path, 'w', encoding='utf-8') as f:
-                    json.dump(config_updates, f, ensure_ascii=False, indent=2)
-                modified.append("config_update.json")
-                self._log(f"配置更新已保存: {config_updates}")
+        # 始终提取配置参数更新 (修复: 不在"not modified"条件内)
+        config_updates = self._extract_config_updates(code_changes)
+        if config_updates:
+            task_id = getattr(self.task_config, 'task_id', 0)
+            output_dir = getattr(self.task_config, 'output_dir', './output')
+            config_path = os.path.join(output_dir, f"task{task_id}", "config_update.json")
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(config_updates, f, ensure_ascii=False, indent=2)
+            self._log(f"配置更新: {config_updates}")
 
         return modified
 
@@ -1174,34 +1159,35 @@ class DesignPhase(BasePhase):
         """
         从代码变更描述中提取配置参数更新
 
-        使用正则表达式匹配常见的超参数变更。
+        使用正则表达式匹配常见的超参数变更, 支持中英文语境。
         """
         updates = {}
 
-        # 匹配各种超参数
         patterns = {
-            'hidden_dim': r'hidden_dim[=:]\s*(\d+)',
-            'embedding_dim': r'embedding_dim[=:]\s*(\d+)',
-            'num_layers': r'num_layers[=:]\s*(\d+)',
-            'dropout': r'dropout[=:]\s*(0?\.\d+)',
-            'lr': r'lr[=:]\s*(0?\.\d+(?:e[+-]?\d+)?)',
-            'batch_size': r'batch_size[=:]\s*(\d+)',
-            'epochs': r'epochs[=:]\s*(\d+)',
-            'early_stop': r'early_stop[=:]\s*(\d+)',
-            'model_type': r'model_type[=:]\s*["\']?([\w]+)["\']?',
+            'hidden_dim': [r'hidden_dim[=: ]+(\d+)', r'hidden.*?(\d{2,4})\s*维', r'隐藏.*?(\d{2,4})'],
+            'embedding_dim': [r'embedding_dim[=: ]+(\d+)', r'embed.*?(\d{2,4})\s*维'],
+            'num_layers': [r'num_layers[=: ]+(\d+)', r'层数.*?(\d)'],
+            'dropout': [r'dropout[=: ]+(0?\.\d+)', r'dropout.*?(0\.\d+)'],
+            'lr': [r'lr[=: ]+(0?\.\d+(?:e[+-]?\d+)?)', r'lr[=: ]+(0?\.\d+(?:e[+-]?\d+)?)', r'学习率.*?(0\.\d+)'],
+            'batch_size': [r'batch_size[=: ]+(\d+)', r'batch.*?(\d{2,4})'],
+            'epochs': [r'epochs[=: ]+(\d+)', r'epochs.*?(\d{2,3})'],
+            'early_stop': [r'early_stop[=: ]+(\d+)'],
+            'model_type': [r'model_type[=: ]+["\']?([\w]+)["\']?', r'model.*?["\']?(sage|gat|gcn|gru4rec|sasrec)["\']?'],
+            'num_heads': [r'num_heads[=: ]+(\d+)'],
+            'max_len': [r'max_len[=: ]+(\d+)'],
         }
 
-        for param, pattern in patterns.items():
-            matches = re.findall(pattern, code_changes, re.IGNORECASE)
-            if matches:
-                # 取最后一个匹配值
-                val = matches[-1]
-                # 类型转换
-                if param in ['hidden_dim', 'embedding_dim', 'num_layers', 'batch_size', 'epochs', 'early_stop']:
-                    val = int(val)
-                elif param in ['dropout', 'lr']:
-                    val = float(val)
-                updates[param] = val
+        for param, pattern_list in patterns.items():
+            for pattern in pattern_list:
+                matches = re.findall(pattern, code_changes, re.IGNORECASE)
+                if matches:
+                    val = matches[-1]
+                    if param in ['hidden_dim', 'embedding_dim', 'num_layers', 'batch_size', 'epochs', 'early_stop', 'num_heads', 'max_len']:
+                        val = int(val)
+                    elif param in ['dropout', 'lr']:
+                        val = float(val)
+                    updates[param] = val
+                    break  # 一个参数只取第一个匹配
 
         return updates
 

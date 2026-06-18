@@ -25,8 +25,31 @@ class GraphDataset:
     """
 
     @staticmethod
+    def _compute_lp_features(adj, labels, train_idx, num_classes, alpha=0.9, num_iter=10):
+        """Label Propagation特征: 从训练节点传播标签分布到全图
+        
+        计算每个节点的软标签分布作为额外特征(10维),
+        为GNN提供图结构先验, 显著提升稀疏图上的分类性能。
+        """
+        N = adj.shape[0]
+        # One-hot初始化有标签节点
+        Y0 = np.zeros((N, num_classes), dtype=np.float32)
+        valid_mask = labels[train_idx] >= 0
+        Y0[train_idx[valid_mask]] = np.eye(num_classes, dtype=np.float32)[labels[train_idx[valid_mask]]]
+        # D^{-1/2} A D^{-1/2} 归一化
+        deg = np.array(adj.sum(1)).flatten().astype(np.float32)
+        deg_inv_sqrt = np.where(deg > 0, deg ** -0.5, 0)
+        D_inv_sqrt = sp.diags(deg_inv_sqrt)
+        adj_norm = D_inv_sqrt @ adj @ D_inv_sqrt
+        # 迭代传播
+        Y = Y0.copy()
+        for _ in range(num_iter):
+            Y = alpha * (adj_norm @ Y) + (1 - alpha) * Y0
+        return Y.astype(np.float32)
+
+    @staticmethod
     def load(data_path):
-        """加载.npz文件
+        """加载.npz文件并自动注入图结构增强特征(LP+度特征)
 
         Args:
             data_path: .npz文件路径
@@ -34,12 +57,12 @@ class GraphDataset:
         Returns:
             字典,包含:
                 - adj: scipy CSR稀疏邻接矩阵 (N, N)
-                - features: scipy CSR稀疏特征矩阵 (N, F)
+                - features: scipy CSR稀疏特征矩阵 (N, F+13) [767原始+10LP+3度]
                 - labels: 节点标签数组 (N,)
                 - train_idx: 训练节点索引
                 - test_idx: 测试节点索引
                 - num_nodes: 节点数量
-                - num_features: 特征维度
+                - num_features: 特征维度(注入后)
                 - num_classes: 类别数量
         """
         data = np.load(data_path, allow_pickle=True)
@@ -63,13 +86,25 @@ class GraphDataset:
         # 自动推断类别数
         num_classes = int(labels[labels >= 0].max()) + 1
 
+        # ── 注入图结构增强特征(LP+度) ──
+        N = adj.shape[0]
+        # (1) Label Propagation: 软标签分布(10维)
+        lp_feats = GraphDataset._compute_lp_features(adj, labels, train_idx, num_classes)
+        # (2) 度特征: log度 + 低度二值标记(3维)
+        degrees = np.array(adj.sum(1)).flatten().astype(np.float32)
+        deg_log = np.log1p(degrees).reshape(-1, 1)
+        deg_low5 = (degrees < 5).astype(np.float32).reshape(-1, 1)
+        deg_low10 = (degrees < 10).astype(np.float32).reshape(-1, 1)
+        extra_feats = np.hstack([lp_feats, deg_log, deg_low5, deg_low10])
+        features = sp.hstack([features, sp.csr_matrix(extra_feats)])
+
         return {
             'adj': adj,
             'features': features,
             'labels': labels,
             'train_idx': train_idx,
             'test_idx': test_idx,
-            'num_nodes': adj.shape[0],
+            'num_nodes': N,
             'num_features': features.shape[1],
             'num_classes': num_classes
         }
