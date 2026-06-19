@@ -10,7 +10,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neural_network import MLPClassifier
 from collections import Counter
-import threading, itertools
+import threading
 
 DEV = torch.device('cuda')
 SEED_BASE = 42
@@ -139,7 +139,7 @@ for hd in sage_hdims:
 if len(sage_jobs) > 1000:
     np.random.shuffle(sage_jobs)
     sage_jobs = sage_jobs[:1000]
-print(f'  Jobs: {len(sage_jobs)} → {len(sage_jobs)*sage_seeds} voters', flush=True)
+print(f'  Jobs: {len(sage_jobs)} voters', flush=True)
 
 t0 = time.time()
 sage_probs_list = []
@@ -173,7 +173,6 @@ try:
     from torch_geometric.nn import Node2Vec
     from torch_geometric.utils import from_scipy_sparse_matrix
     from torch_geometric.data import Data
-    from sklearn.neural_network import MLPClassifier
 
     edge_index = from_scipy_sparse_matrix(adj_raw.tocoo())[0]
     data_tg = Data(edge_index=edge_index, num_nodes=N)
@@ -196,7 +195,13 @@ try:
     n2v_probs_list = []
     for ji, (p, q, dim, wl, s, key) in enumerate(n2v_params):
         if key in all_ckpt:
-            n2v_probs_list.append(np.atleast_2d(all_ckpt[key]))
+            # ckpt stores (2, 2751, 10) = SVM + MLP → flatten to individual voters
+            ckpt_data = all_ckpt[key]
+            if ckpt_data.ndim == 3 and ckpt_data.shape[0] == 2:
+                n2v_probs_list.append(ckpt_data[0])  # SVM
+                n2v_probs_list.append(ckpt_data[1])  # MLP
+            else:
+                n2v_probs_list.append(ckpt_data)
             continue
         s0 = time.time()
         torch.manual_seed(SEED_BASE + s)
