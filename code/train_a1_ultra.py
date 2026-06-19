@@ -146,52 +146,22 @@ def train_config(cfg):
         print(f'  [{arch}] h{hdim} L{nlayers} H{heads} a{a_str}: {nseeds}s, {elapsed:.0f}s', flush=True)
     return np.stack(probs, axis=0)
 
-# ═══ 配置表: SAGE极限版（2000 voters，榨干V100） ═══
-# 40 configs × 50 seeds = 2000 voters，预计20-30分钟跑完
+# ═══ 配置表: SAGE + LP集成（目标0.77） ═══
+# 10 configs × 10 seeds = 100 SAGE voters + 9 LP variants = 109 total
 configs = [
-    # 小模型（32-64 hidden，快速）
-    ('SAGE', 32, 1, 0, 0.80, 50),
-    ('SAGE', 32, 2, 0, 0.80, 50),
-    ('SAGE', 32, 2, 0, 0.90, 50),
-    ('SAGE', 32, 3, 0, 0.85, 50),
-    ('SAGE', 64, 1, 0, 0.80, 50),
-    ('SAGE', 64, 2, 0, 0.80, 50),
-    ('SAGE', 64, 2, 0, 0.90, 50),
-    ('SAGE', 64, 2, 0, 0.95, 50),
-    ('SAGE', 64, 3, 0, 0.85, 50),
-    ('SAGE', 64, 3, 0, 0.90, 50),
-    # 中模型（128 hidden，平衡）
-    ('SAGE', 128, 1, 0, 0.85, 50),
-    ('SAGE', 128, 2, 0, 0.85, 50),
-    ('SAGE', 128, 2, 0, 0.90, 50),
-    ('SAGE', 128, 2, 0, 0.95, 50),
-    ('SAGE', 128, 3, 0, 0.85, 50),
-    ('SAGE', 128, 3, 0, 0.90, 50),
-    ('SAGE', 128, 3, 0, 0.93, 50),
-    ('SAGE', 128, 3, 0, 0.95, 50),
-    ('SAGE', 128, 4, 0, 0.90, 50),
-    ('SAGE', 128, 4, 0, 0.93, 50),
-    # 大模型（256 hidden，全局）
-    ('SAGE', 256, 2, 0, 0.90, 50),
-    ('SAGE', 256, 3, 0, 0.93, 50),
-    ('SAGE', 256, 3, 0, 0.95, 50),
-    ('SAGE', 256, 3, 0, 0.97, 50),
-    ('SAGE', 256, 4, 0, 0.93, 50),
-    ('SAGE', 256, 4, 0, 0.97, 50),
-    # 超大模型（512 hidden，极致）
-    ('SAGE', 512, 2, 0, 0.95, 50),
-    ('SAGE', 512, 3, 0, 0.97, 50),
-    ('SAGE', 512, 3, 0, 0.99, 50),
-    ('SAGE', 512, 4, 0, 0.99, 50),
-    # 更多α变体（增加多样性）
-    ('SAGE', 64,  2, 0, 0.75, 50),
-    ('SAGE', 64,  2, 0, 0.85, 50),
-    ('SAGE', 128, 2, 0, 0.75, 50),
-    ('SAGE', 128, 2, 0, 0.88, 50),
-    ('SAGE', 256, 3, 0, 0.88, 50),
-    ('SAGE', 256, 3, 0, 0.91, 50),
-    ('SAGE', 512, 3, 0, 0.95, 50),
-    ('SAGE', 512, 3, 0, 0.98, 50),
+    # 小模型（快速，捕捉局部结构）
+    ('SAGE', 64,  2, 0, 0.80, 10),
+    ('SAGE', 64,  2, 0, 0.90, 10),
+    ('SAGE', 64,  3, 0, 0.85, 10),
+    # 中模型（平衡）
+    ('SAGE', 128, 2, 0, 0.85, 10),
+    ('SAGE', 128, 2, 0, 0.95, 10),
+    ('SAGE', 128, 3, 0, 0.90, 10),
+    ('SAGE', 128, 3, 0, 0.93, 10),
+    # 大模型（捕捉全局结构）
+    ('SAGE', 256, 3, 0, 0.93, 10),
+    ('SAGE', 256, 4, 0, 0.97, 10),
+    ('SAGE', 512, 3, 0, 0.99, 10),
 ]
 
 total_voters = sum(c[-1] for c in configs)
@@ -234,9 +204,21 @@ for i in range(start_i, len(configs)):
 torch.cuda.synchronize()
 elapsed = time.time() - t0
 
-# ═══ 软投票 ═══
+# ═══ 软投票 (SAGE + LP) ═══
 all_p = np.concatenate(all_probs, axis=0)  # (V, 2751, 10)
-avg_prob = all_p.mean(axis=0)
+
+# 加LP voters (用第58行已计算的LP字典)
+lp_probs = []
+for alpha in ALPHAS:
+    lp_pred = LP[alpha][te_idx]  # (2751, 10)
+    lp_probs.append(lp_pred)
+lp_p = np.stack(lp_probs, axis=0)  # (9, 2751, 10)
+
+# 合并SAGE和LP
+all_p_combined = np.concatenate([all_p, lp_p], axis=0)  # (V+9, 2751, 10)
+print(f'[ENSEMBLE] SAGE: {len(all_p)} voters + LP: {len(lp_p)} variants = {len(all_p_combined)} total', flush=True)
+
+avg_prob = all_p_combined.mean(axis=0)
 final = avg_prob.argmax(axis=1)
 dist = Counter(final)
 
