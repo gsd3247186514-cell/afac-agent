@@ -216,7 +216,7 @@ for ep in range(EPOCHS):
                         uf_t = uf_cache[uid].unsqueeze(0).to(DEV)
                         urep = model(seq_t, uf_t)
                         cand_t = torch.tensor(cands, dtype=torch.long, device=DEV)
-                        gru_s = (urep @ model.emb(cand_t)).squeeze(0).cpu().numpy()
+                        gru_s = (urep @ model.emb(cand_t).T).squeeze(0).cpu().numpy()
                     gmax = gru_s.max(); icfmax = icf_s.max()
                     if gmax > 0: gru_s /= gmax
                     if icfmax > 0: icf_s /= icfmax
@@ -258,7 +258,7 @@ def predict(row, w_gru, w_icf):
         uf_t = torch.tensor(user_feat_n[u_idx], dtype=torch.float32, device=DEV).unsqueeze(0)
         urep = model(seq_t, uf_t)
         cand_t = torch.tensor(cands, dtype=torch.long, device=DEV)
-        gru_s = (urep @ model.emb(cand_t)).squeeze(0).cpu().numpy()
+        gru_s = (urep @ model.emb(cand_t).T).squeeze(0).cpu().numpy()
     
     gmax = gru_s.max(); icfmax = icf_s.max()
     if gmax>0: gru_s/=gmax
