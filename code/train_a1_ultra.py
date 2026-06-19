@@ -146,17 +146,16 @@ def train_config(cfg):
         print(f'  [{arch}] h{hdim} L{nlayers} H{heads} a{a_str}: {nseeds}s, {elapsed:.0f}s', flush=True)
     return np.stack(probs, axis=0)
 
-# ═══ 配置表: SAGE-ONLY ═══
+# ═══ 配置表: SAGE-ONLY (8 configs, 24 voters) ═══
 configs = [
-    # SAGE-only (8 configs, 50 voters)
-    ('SAGE', 64,  2, 0, 0.80, 10),
-    ('SAGE', 64,  2, 0, 0.90, 10),
-    ('SAGE', 128, 2, 0, 0.85, 10),
-    ('SAGE', 128, 2, 0, 0.95, 10),
-    ('SAGE', 128, 3, 0, 0.90, 10),
-    ('SAGE', 256, 3, 0, 0.93, 10),
-    ('SAGE', 256, 4, 0, 0.97, 10),
-    ('SAGE', 512, 3, 0, 0.99, 10),
+    ('SAGE', 64,  2, 0, 0.80, 3),
+    ('SAGE', 64,  2, 0, 0.90, 3),
+    ('SAGE', 128, 2, 0, 0.85, 3),
+    ('SAGE', 128, 2, 0, 0.95, 3),
+    ('SAGE', 128, 3, 0, 0.90, 3),
+    ('SAGE', 256, 3, 0, 0.93, 3),
+    ('SAGE', 256, 4, 0, 0.97, 3),
+    ('SAGE', 512, 3, 0, 0.99, 3),
 ]
 
 total_voters = sum(c[-1] for c in configs)
