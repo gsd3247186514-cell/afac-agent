@@ -393,7 +393,7 @@ try:
                 for _ in range(k-1):
                     M = A.dot(M)
                 emb = StandardScaler().fit_transform(M.astype(np.float64))
-                lr = LogisticRegression(max_iter=500, multi_class='multinomial', random_state=s)
+                lr = LogisticRegression(max_iter=500, random_state=s)
                 lr.fit(emb[tr_idx], labels[tr_idx])
                 dw_probs_list.append(lr.predict_proba(emb[te_idx]))
                 all_results[key] = ('dw', dw_probs_list[-1])
@@ -441,7 +441,7 @@ print(f'  Graph features: {gfs.shape}', flush=True)
 # Multiple classifiers
 feat_probs_list = []
 for clf_name, clf in [
-    ('LR', LogisticRegression(max_iter=1000, multi_class='multinomial', random_state=SEED_BASE)),
+    ('LR', LogisticRegression(max_iter=1000, random_state=SEED_BASE)),
     ('RF_100', RandomForestClassifier(n_estimators=100, random_state=SEED_BASE)),
     ('RF_300', RandomForestClassifier(n_estimators=300, random_state=SEED_BASE+1)),
     ('SVM_rbf', SVC(probability=True, kernel='rbf', random_state=SEED_BASE)),

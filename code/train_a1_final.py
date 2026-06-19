@@ -251,7 +251,7 @@ feat_eng = np.stack([log_deg, pr], axis=1)  # (N, 2)
 feat_eng = StandardScaler().fit_transform(feat_eng.astype(np.float64))
 
 # 用训练集标签训练Logistic Regression
-clf_lr = LogisticRegression(max_iter=1000, multi_class='multinomial', C=1.0, random_state=SEED)
+clf_lr = LogisticRegression(max_iter=1000, C=1.0, random_state=SEED)
 clf_lr.fit(feat_eng[tr_idx], labels[tr_idx])
 feat_probs = clf_lr.predict_proba(feat_eng[te_idx])  # (2751, 10)
 feat_pred = feat_probs.argmax(1)
