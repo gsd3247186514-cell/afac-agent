@@ -146,16 +146,22 @@ def train_config(cfg):
         print(f'  [{arch}] h{hdim} L{nlayers} H{heads} a{a_str}: {nseeds}s, {elapsed:.0f}s', flush=True)
     return np.stack(probs, axis=0)
 
-# ═══ 配置表: SAGE-ONLY (8 configs, 24 voters) ═══
+# ═══ 配置表: SAGE极限版（出题人认证：SAGE > 一切） ═══
+# 10 configs × 10 seeds = 100 voters，预计10-15分钟跑完
 configs = [
-    ('SAGE', 64,  2, 0, 0.80, 3),
-    ('SAGE', 64,  2, 0, 0.90, 3),
-    ('SAGE', 128, 2, 0, 0.85, 3),
-    ('SAGE', 128, 2, 0, 0.95, 3),
-    ('SAGE', 128, 3, 0, 0.90, 3),
-    ('SAGE', 256, 3, 0, 0.93, 3),
-    ('SAGE', 256, 4, 0, 0.97, 3),
-    ('SAGE', 512, 3, 0, 0.99, 3),
+    # 小模型（快速，捕捉局部结构）
+    ('SAGE', 64,  2, 0, 0.80, 10),
+    ('SAGE', 64,  2, 0, 0.90, 10),
+    ('SAGE', 64,  3, 0, 0.85, 10),
+    # 中模型（平衡）
+    ('SAGE', 128, 2, 0, 0.85, 10),
+    ('SAGE', 128, 2, 0, 0.95, 10),
+    ('SAGE', 128, 3, 0, 0.90, 10),
+    ('SAGE', 128, 3, 0, 0.93, 10),
+    # 大模型（捕捉全局结构）
+    ('SAGE', 256, 3, 0, 0.93, 10),
+    ('SAGE', 256, 4, 0, 0.97, 10),
+    ('SAGE', 512, 3, 0, 0.99, 10),
 ]
 
 total_voters = sum(c[-1] for c in configs)
