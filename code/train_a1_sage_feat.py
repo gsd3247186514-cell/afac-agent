@@ -163,6 +163,72 @@ t_sage = time.time() - t0
 print(f'  SAGE done: {sage_probs.shape}, {t_sage:.0f}s ({t_sage/60:.1f}min)', flush=True)
 
 # ═══════════════════════════════════════════════
+# NODE2VEC: 200 voters (~30min, torch_geometric 2.4.0)
+# ═══════════════════════════════════════════════
+print('\n' + '='*60)
+print('NODE2VEC: 200 voters (~30min)')
+print('='*60, flush=True)
+n2v_probs = np.zeros((0, N_TEST, NC))
+try:
+    from torch_geometric.nn import Node2Vec
+    from torch_geometric.utils import from_scipy_sparse_matrix
+    from torch_geometric.data import Data
+    from sklearn.neural_network import MLPClassifier
+
+    edge_index = from_scipy_sparse_matrix(adj_raw.tocoo())[0]
+    data_tg = Data(edge_index=edge_index, num_nodes=N)
+
+    n2v_params = []
+    for p, q in [(0.5, 0.5), (0.5, 1), (0.5, 2), (1, 0.5), (1, 1), (1, 2), (2, 0.5), (2, 1), (2, 2)]:
+        for dim in [128, 256]:
+            for wl in [20, 40]:
+                for s in range(10):
+                    key = f'n2v_p{p}_q{q}_dim{dim}_wl{wl}_s{s}'
+                    if key not in all_ckpt:
+                        n2v_params.append((p, q, dim, wl, s, key))
+
+    if len(n2v_params) > 50:
+        np.random.shuffle(n2v_params)
+        n2v_params = n2v_params[:50]
+    print(f'  Jobs: {len(n2v_params)} × 2 classifiers = {len(n2v_params)*2} voters', flush=True)
+
+    t_n2v = time.time()
+    n2v_probs_list = []
+    for ji, (p, q, dim, wl, s, key) in enumerate(n2v_params):
+        if key in all_ckpt:
+            n2v_probs_list.append(np.atleast_2d(all_ckpt[key]))
+            continue
+        s0 = time.time()
+        torch.manual_seed(SEED_BASE + s)
+        np.random.seed(SEED_BASE + s)
+        model = Node2Vec(data_tg.edge_index, embedding_dim=dim, walk_length=wl,
+                         context_size=10, walks_per_node=10, p=p, q=q, sparse=True).to(DEV)
+        opt = torch.optim.SparseAdam(model.parameters(), lr=0.01)
+        model.train()
+        for _ in range(50): opt.zero_grad(); model.loss().backward(); opt.step()
+        model.eval()
+        with torch.no_grad():
+            emb = model.embedding.weight.cpu().numpy()
+        # SVM classifier
+        svm = SVC(probability=True, kernel='rbf', random_state=s)
+        svm.fit(emb[tr_idx], labels[tr_idx])
+        n2v_probs_list.append(svm.predict_proba(emb[te_idx]))
+        # MLP classifier
+        mlp = MLPClassifier(hidden_layer_sizes=(256,), max_iter=200, random_state=s)
+        mlp.fit(emb[tr_idx], labels[tr_idx])
+        n2v_probs_list.append(mlp.predict_proba(emb[te_idx]))
+        all_ckpt[key] = np.array(n2v_probs_list[-2:])
+        if (ji+1) % 10 == 0 or ji == len(n2v_params)-1:
+            elapsed = time.time() - t_n2v
+            print(f'  [{ji+1}/{len(n2v_params)}] {elapsed:.0f}s elapsed', flush=True)
+            save_ckpt()
+
+    n2v_probs = np.stack(n2v_probs_list, axis=0)
+    print(f'  Node2Vec done: {n2v_probs.shape}, {time.time()-t_n2v:.0f}s', flush=True)
+except Exception as e:
+    print(f'  ⚠ Node2Vec failed: {e}, continuing without it', flush=True)
+
+# ═══════════════════════════════════════════════
 # FEATURE ENGINEERING: 1000 voters (instant)
 # ═══════════════════════════════════════════════
 print('\n' + '='*60)
@@ -261,10 +327,10 @@ print('\n' + '='*60)
 print('WEIGHT GRID SEARCH')
 print('='*60, flush=True)
 
-# Combine: SAGE + LP + Feat
-all_probs = np.concatenate([sage_probs, lp_probs, feat_probs], axis=0)
-n_sage, n_lp, n_feat = sage_probs.shape[0], lp_probs.shape[0], feat_probs.shape[0]
-print(f'  Total: {all_probs.shape[0]} voters (S:{n_sage} LP:{n_lp} F:{n_feat})', flush=True)
+# Combine: SAGE + LP + Node2Vec + Feat
+all_probs = np.concatenate([sage_probs, lp_probs, n2v_probs, feat_probs], axis=0)
+n_sage, n_lp, n_n2v, n_feat = sage_probs.shape[0], lp_probs.shape[0], n2v_probs.shape[0], feat_probs.shape[0]
+print(f'  Total: {all_probs.shape[0]} voters (S:{n_sage} LP:{n_lp} N2V:{n_n2v} F:{n_feat})', flush=True)
 
 # Baseline (equal weights)
 base_avg = all_probs.mean(0).argmax(1)
@@ -275,35 +341,40 @@ print(f'  Baseline dist: {dict(sorted(base_dist.items()))}', flush=True)
 sage_avg = sage_probs.mean(0).argmax(1)
 print(f'  SAGE-only dist: {dict(sorted(Counter(sage_avg).items()))}', flush=True)
 
-# Grid search: SAGE weight × Feat weight
+# Node2Vec vs SAGE disagreement
+if n_n2v > 0:
+    n2v_avg = n2v_probs.mean(0).argmax(1)
+    print(f'  SAGE vs Node2Vec disagreement: {(sage_avg!=n2v_avg).sum()}/{N_TEST} ({100*(sage_avg!=n2v_avg).sum()/N_TEST:.1f}%)', flush=True)
+
+# Grid search: SAGE × Feat × Node2Vec
 best_change = 0
-best_weights = {'SAGE': 4, 'LP': 0.5, 'Feat': 3}
+best_weights = {'SAGE': 4, 'LP': 0.5, 'Node2Vec': 2, 'Feat': 3}
 best_pred = base_avg
 
-for w_s in range(1, 15):
-    for w_f in range(1, 15):
-        weights = np.concatenate([
-            np.full(n_sage, float(w_s)),
-            np.full(n_lp, 0.5),
-            np.full(n_feat, float(w_f)),
-        ])
-        avg = np.average(all_probs, axis=0, weights=weights)
-        pred = avg.argmax(1)
-        # Score: maximize change from SAGE-only (diversity) AND from baseline (signal)
-        change_sage = (pred != sage_avg).sum()
-        change_base = (pred != base_avg).sum()
-        score = change_sage + 0.3 * change_base
-        if score > best_change:
-            best_change = score
-            best_weights = {'SAGE': w_s, 'LP': 0.5, 'Feat': w_f}
-            best_pred = pred
+for w_s in range(1, 12):
+    for w_f in range(1, 12):
+        for w_n in range(1, 8) if n_n2v > 0 else [0]:
+            parts = [np.full(n_sage, float(w_s))]
+            if n_lp > 0: parts.append(np.full(n_lp, 0.5))
+            if n_n2v > 0: parts.append(np.full(n_n2v, float(w_n)))
+            parts.append(np.full(n_feat, float(w_f)))
+            weights = np.concatenate(parts)
+            avg = np.average(all_probs, axis=0, weights=weights)
+            pred = avg.argmax(1)
+            change_sage = (pred != sage_avg).sum()
+            change_base = (pred != base_avg).sum()
+            score = change_sage + 0.3 * change_base
+            if score > best_change:
+                best_change = score
+                best_weights = {'SAGE': w_s, 'LP': 0.5, 'Node2Vec': w_n if n_n2v > 0 else 0, 'Feat': w_f}
+                best_pred = pred
 
 # Apply best weights
-best_w = np.concatenate([
-    np.full(n_sage, float(best_weights['SAGE'])),
-    np.full(n_lp, 0.5),
-    np.full(n_feat, float(best_weights['Feat'])),
-])
+parts_w = [np.full(n_sage, float(best_weights['SAGE']))]
+if n_lp > 0: parts_w.append(np.full(n_lp, 0.5))
+if n_n2v > 0: parts_w.append(np.full(n_n2v, float(best_weights['Node2Vec'])))
+parts_w.append(np.full(n_feat, float(best_weights['Feat'])))
+best_w = np.concatenate(parts_w)
 weighted_avg = np.average(all_probs, axis=0, weights=best_w)
 final = weighted_avg.argmax(1)
 final_dist = Counter(final)
@@ -322,12 +393,12 @@ df.to_csv(os.path.join(OUT, 'A1.csv'), index=False)
 total_t = time.time() - t0
 print(f'\n{"="*60}')
 print(f'SAVED to {OUT}/A1.csv')
-print(f'SAGE: {n_sage}, LP: {n_lp}, Feat: {n_feat}')
+print(f'SAGE: {n_sage}, LP: {n_lp}, N2V: {n_n2v}, Feat: {n_feat}')
 print(f'Total: {all_probs.shape[0]} voters')
 print(f'Best weights: {best_weights}')
 print(f'Final dist: {dict(sorted(final_dist.items()))}')
 print(f'Time: {total_t:.0f}s ({total_t/60:.0f}min = {total_t/3600:.1f}h)')
 print(f'{"="*60}')
-print(f'\n[SAGE+FEAT RESULT] {all_probs.shape[0]} voters | {total_t/3600:.1f}h | '
-      f'w_SAGE={best_weights["SAGE"]} w_Feat={best_weights["Feat"]} | '
+print(f'\n[SAGE+N2V+FEAT RESULT] {all_probs.shape[0]} voters | {total_t/3600:.1f}h | '
+      f'w={best_weights} | '
       f'dist: {dict(sorted(final_dist.items()))}', flush=True)
